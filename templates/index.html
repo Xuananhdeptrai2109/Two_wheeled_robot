@@ -1,0 +1,342 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Điều Khiển Xe Robot</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            user-select: none;
+            -webkit-user-select: none;
+        }
+        body { 
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
+            text-align: center; 
+            background: linear-gradient(135deg, #1e293b, #0f172a); 
+            color: #f8fafc;
+            min-height: 100vh;
+            margin: 0;
+            padding: 30px 15px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        h2 {
+            margin-bottom: 8px;
+            font-size: 24px;
+            letter-spacing: 0.5px;
+        }
+        .subtitle {
+            color: #94a3b8;
+            font-size: 14px;
+            margin-bottom: 25px;
+        }
+        .controller { 
+            display: grid; 
+            grid-template-columns: repeat(3, 85px); 
+            gap: 12px; 
+            justify-content: center; 
+            margin: 10px auto; 
+        }
+        button.control-btn {
+            width: 85px; 
+            height: 85px; 
+            font-size: 16px; 
+            font-weight: 600; 
+            border: none; 
+            border-radius: 18px; 
+            background: #2563eb; 
+            color: white; 
+            cursor: pointer;
+            touch-action: none;
+            box-shadow: 0 4px 14px rgba(37, 99, 235, 0.4);
+            transition: all 0.15s ease;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 4px;
+        }
+        button.control-btn .icon {
+            font-size: 22px;
+        }
+        button.control-btn:hover { 
+            background-color: #1d4ed8; 
+            transform: translateY(-2px);
+        }
+        button.control-btn.active, button.control-btn:active { 
+            background-color: #1e40af; 
+            transform: scale(0.95);
+            box-shadow: 0 2px 6px rgba(30, 64, 175, 0.6);
+        }
+        .btn-stop { 
+            background: #ef4444 !important; 
+            box-shadow: 0 4px 14px rgba(239, 68, 68, 0.4) !important;
+        }
+        .btn-stop:hover { 
+            background-color: #dc2626 !important; 
+        }
+        .btn-stop.active, .btn-stop:active { 
+            background-color: #b91c1c !important; 
+        }
+        .empty { 
+            visibility: hidden; 
+        }
+        .card {
+            background: rgba(30, 41, 59, 0.7);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+            border-radius: 20px;
+            padding: 24px;
+            max-width: 360px;
+            width: 100%;
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.3);
+        }
+        #status-card {
+            margin-top: 20px;
+            padding: 12px 18px;
+            border-radius: 12px;
+            background: rgba(15, 23, 42, 0.6);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            width: 100%;
+            max-width: 360px;
+        }
+        #status { 
+            margin: 0;
+            font-size: 15px; 
+            font-weight: 500; 
+            color: #38bdf8;
+        }
+        .hint {
+            margin-top: 15px;
+            font-size: 13px;
+            color: #64748b;
+            line-height: 1.5;
+        }
+        .hint kbd {
+            background: #334155;
+            color: #e2e8f0;
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-size: 12px;
+            border: 1px solid #475569;
+        }
+    </style>
+</head>
+<body>
+    <div class="card">
+        <h2>Trung Tâm Điều Khiển</h2>
+        <div class="subtitle">Giữ để chạy • Nhả để dừng</div>
+
+        <div class="controller">
+            <div class="empty"></div>
+            <button class="control-btn" id="btn-forward" data-action="forward">
+                <span class="icon">▲</span>
+                <span>Tiến</span>
+            </button>
+            <div class="empty"></div>
+
+            <button class="control-btn" id="btn-left" data-action="left">
+                <span class="icon">◄</span>
+                <span>Trái</span>
+            </button>
+            <button class="control-btn btn-stop" id="btn-stop" data-action="stop">
+                <span class="icon">■</span>
+                <span>Dừng</span>
+            </button>
+            <button class="control-btn" id="btn-right" data-action="right">
+                <span class="icon">►</span>
+                <span>Phải</span>
+            </button>
+
+            <div class="empty"></div>
+            <button class="control-btn" id="btn-backward" data-action="backward">
+                <span class="icon">▼</span>
+                <span>Lùi</span>
+            </button>
+            <div class="empty"></div>
+        </div>
+
+        <div class="hint">
+            Hỗ trợ phím bấm: <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> hoặc phím mũi tên <kbd>↑</kbd><kbd>←</kbd><kbd>↓</kbd><kbd>→</kbd><br>
+            Phím <kbd>Space</kbd> để dừng khẩn cấp.
+        </div>
+    </div>
+
+    <div id="status-card">
+        <p id="status">Trạng thái: Sẵn sàng</p>
+    </div>
+
+    <script>
+        let currentAction = null;
+        const statusEl = document.getElementById('status');
+
+        // Hàm gửi lệnh đến Flask server
+        function sendCommand(action) {
+            fetch('/send_command', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ action: action })
+            })
+            .then(res => res.json())
+            .then(data => { 
+                if (data.status === 'error') {
+                    statusEl.innerText = 'Lỗi gửi lệnh: ' + data.message;
+                    statusEl.style.color = '#ef4444';
+                } else {
+                    if (action === 'stop') {
+                        statusEl.innerText = 'Trạng thái: Đã dừng';
+                        statusEl.style.color = '#94a3b8';
+                    } else {
+                        statusEl.innerText = `Đang chạy [${action}]: Trái ${data.left} | Phải ${data.right}`; 
+                        statusEl.style.color = '#22c55e';
+                    }
+                }
+            })
+            .catch(err => {
+                console.error('Lỗi truyền dữ liệu:', err);
+                statusEl.innerText = 'Lỗi kết nối tới Server Python!';
+                statusEl.style.color = '#ef4444';
+            });
+        }
+
+        // Bắt đầu di chuyển khi bấm giữ
+        function startMove(action) {
+            if (currentAction === action) return;
+            currentAction = action;
+
+            // Đổi giao diện nút tương ứng sang active
+            updateButtonUI(action, true);
+            sendCommand(action);
+        }
+
+        // Dừng di chuyển khi nhả tay
+        function stopMove(action) {
+            if (currentAction === null) return;
+            
+            // Nếu truyền action cụ thể, chỉ dừng khi khớp action đang chạy
+            if (action && currentAction !== action) return;
+
+            updateButtonUI(currentAction, false);
+            currentAction = null;
+            sendCommand('stop');
+        }
+
+        function updateButtonUI(action, isActive) {
+            const btn = document.querySelector(`[data-action="${action}"]`);
+            if (btn) {
+                if (isActive) {
+                    btn.classList.add('active');
+                } else {
+                    btn.classList.remove('active');
+                }
+            }
+        }
+
+        // Gán sự kiện cho các nút điều khiển
+        const buttons = document.querySelectorAll('.control-btn');
+        buttons.forEach(btn => {
+            const action = btn.getAttribute('data-action');
+
+            if (action === 'stop') {
+                // Nút Dừng: click là dừng hẳn
+                btn.addEventListener('click', () => {
+                    if (currentAction) updateButtonUI(currentAction, false);
+                    currentAction = null;
+                    sendCommand('stop');
+                });
+                return;
+            }
+
+            // Sự kiện Chuột (Mouse)
+            btn.addEventListener('mousedown', (e) => {
+                e.preventDefault();
+                startMove(action);
+            });
+
+            btn.addEventListener('mouseup', (e) => {
+                e.preventDefault();
+                stopMove(action);
+            });
+
+            btn.addEventListener('mouseleave', () => {
+                stopMove(action);
+            });
+
+            // Sự kiện Cảm ứng (Touch - Điện thoại/Tablet)
+            btn.addEventListener('touchstart', (e) => {
+                e.preventDefault();
+                startMove(action);
+            }, { passive: false });
+
+            btn.addEventListener('touchend', (e) => {
+                e.preventDefault();
+                stopMove(action);
+            }, { passive: false });
+
+            btn.addEventListener('touchcancel', (e) => {
+                e.preventDefault();
+                stopMove(action);
+            }, { passive: false });
+
+            // Chặn mở menu chuột phải khi giữ lâu trên điện thoại
+            btn.addEventListener('contextmenu', (e) => e.preventDefault());
+        });
+
+        // Đảm bảo an toàn: Nhả chuột ở bất kỳ đâu trên màn hình cũng sẽ dừng xe
+        window.addEventListener('mouseup', () => {
+            if (currentAction) stopMove();
+        });
+
+        // Bổ sung điều khiển bằng Bàn phím (WASD và Phím mũi tên)
+        const keyMap = {
+            'ArrowUp': 'forward',
+            'KeyW': 'forward',
+            'w': 'forward',
+            'W': 'forward',
+
+            'ArrowDown': 'backward',
+            'KeyS': 'backward',
+            's': 'backward',
+            'S': 'backward',
+
+            'ArrowLeft': 'left',
+            'KeyA': 'left',
+            'a': 'left',
+            'A': 'left',
+
+            'ArrowRight': 'right',
+            'KeyD': 'right',
+            'd': 'right',
+            'D': 'right',
+
+            'Space': 'stop',
+            ' ': 'stop'
+        };
+
+        window.addEventListener('keydown', (e) => {
+            if (e.repeat) return; // Bỏ qua tự lặp phím của OS
+            const action = keyMap[e.key] || keyMap[e.code];
+            if (action) {
+                e.preventDefault();
+                if (action === 'stop') {
+                    if (currentAction) updateButtonUI(currentAction, false);
+                    currentAction = null;
+                    sendCommand('stop');
+                } else {
+                    startMove(action);
+                }
+            }
+        });
+
+        window.addEventListener('keyup', (e) => {
+            const action = keyMap[e.key] || keyMap[e.code];
+            if (action && action !== 'stop') {
+                e.preventDefault();
+                stopMove(action);
+            }
+        });
+    </script>
+</body>
+</html>
